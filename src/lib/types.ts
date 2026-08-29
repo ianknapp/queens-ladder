@@ -27,6 +27,7 @@ export type CapturePayload = {
   kind: CaptureKind;
   pageUrl: string;
   entries: LeaderboardEntry[];
+  globalAverageMs?: number | null;
   raw?: unknown;
 };
 
@@ -52,6 +53,7 @@ export type SeasonRow = {
   wins: number;
   daysPlayed: number;
   averageTimeMs: number | null;
+  belowAveragePct: number | null;
 };
 
 export type GameCell = {
@@ -66,6 +68,7 @@ export type GameSeasonCell = {
   wins: number;
   daysPlayed: number;
   averageTimeMs: number | null;
+  belowAveragePct: number | null;
 };
 
 export type GameMeta = {
@@ -73,6 +76,7 @@ export type GameMeta = {
   puzzleDate: string | null;
   puzzleNumber: number | null;
   capturedAt: string | null;
+  globalAverageMs: number | null;
 };
 
 export type LadderPlayer = {

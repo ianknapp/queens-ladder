@@ -20,6 +20,7 @@ create table public.puzzles (
   game text not null default 'queens',
   puzzle_date date not null,
   puzzle_number integer,
+  global_average_ms integer,
   created_at timestamptz not null default now(),
   unique (game, puzzle_date)
 );
@@ -33,6 +34,7 @@ create table public.snapshots (
   status text not null default 'success'
     check (status in ('success', 'partial', 'failed')),
   visible_count integer not null default 0,
+  global_average_ms integer,
   raw_json jsonb not null default '{}'::jsonb
 );
 

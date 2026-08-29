@@ -4,10 +4,12 @@ import { stdin as input, stdout as output } from "node:process";
 import { resolve } from "node:path";
 import { chromium, type BrowserContext, type Frame, type Page, type Response } from "playwright";
 import { ingestCapture } from "../src/lib/ingest";
-import { leaderboardUrl, parseGameArgs, type GameDef } from "../src/lib/games";
+import { leaderboardUrl, parseGameArgs, resultsUrl, type GameDef } from "../src/lib/games";
 import {
   extractEntriesFromJson,
   extractEntriesFromBodyText,
+  extractGlobalAverageMsFromJson,
+  extractGlobalAverageMsFromText,
   mergeEntries,
   puzzleNumberFromText,
 } from "../src/lib/parse-leaderboard";
@@ -35,6 +37,7 @@ type DomCapture = {
   pageUrl: string;
   bodyText: string;
   entries: LeaderboardEntry[];
+  globalAverageMs: number | null;
 };
 
 function extractFromDom(gameName: string): DomCapture {
@@ -87,11 +90,32 @@ function extractFromDom(gameName: string): DomCapture {
   const puzzle =
     bodyText.match(new RegExp(`${escaped}\\s*#\\s*(\\d+)`, "i")) ??
     bodyText.match(/Puzzle No\.?\s*(\d+)/i);
+
+  let globalAverageMs: number | null = null;
+  const chiclets = Array.from(document.querySelectorAll(".pr-golden-chiclet"));
+  for (const chiclet of chiclets) {
+    const subtext = chiclet.querySelector(".pr-golden-chiclet__subtext")?.textContent ?? "";
+    if (!/today.?s\s+avg/i.test(subtext)) continue;
+    const clock = subtext.match(/(\d{1,2}:\d{2})/);
+    if (!clock) continue;
+    const parts = clock[1].split(":");
+    globalAverageMs = (Number(parts[0]) * 60 + Number(parts[1])) * 1000;
+    break;
+  }
+  if (globalAverageMs == null) {
+    const avgMatch = bodyText.match(/today['’]?s\s+avg[:\s]+(\d{1,2}:\d{2})/i);
+    if (avgMatch) {
+      const parts = avgMatch[1].split(":");
+      globalAverageMs = (Number(parts[0]) * 60 + Number(parts[1])) * 1000;
+    }
+  }
+
   return {
     puzzleNumber: puzzle ? Number(puzzle[1]) : null,
     pageUrl: location.href,
     bodyText: bodyText.slice(0, 20_000),
     entries,
+    globalAverageMs,
   };
 }
 
@@ -111,6 +135,7 @@ async function extractFromPage(page: Page, gameName: string): Promise<DomCapture
           pageUrl: "frame",
           bodyText: "",
           entries: [] as LeaderboardEntry[],
+          globalAverageMs: null,
         };
       }
     }),
@@ -121,6 +146,7 @@ async function extractFromPage(page: Page, gameName: string): Promise<DomCapture
     pageUrl: page.url(),
     bodyText: captures.map((item) => item.bodyText).filter(Boolean).join("\n"),
     entries: mergeEntries(...captures.map((item) => item.entries)),
+    globalAverageMs: captures.find((item) => item.globalAverageMs != null)?.globalAverageMs ?? null,
   };
 }
 
@@ -262,6 +288,22 @@ async function captureOnce(
       ? mergeEntries(dom.entries, fromNetwork)
       : mergeEntries(fromNetwork, fromText);
   const puzzleNumber = dom.puzzleNumber ?? puzzleNumberFromText(dom.bodyText, game.name);
+  let globalAverageMs =
+    dom.globalAverageMs ??
+    extractGlobalAverageMsFromText(dom.bodyText) ??
+    extractGlobalAverageMsFromJson(networkJson);
+
+  if (globalAverageMs == null && entries.length > 0) {
+    page = await gotoOrRevive(context, page, resultsUrl(game.slug));
+    await page
+      .waitForSelector(".pr-golden-chiclet, .pr-top__headline", { timeout: 12_000 })
+      .catch(() => undefined);
+    const resultsDom = await extractFromPage(page, game.name);
+    globalAverageMs =
+      resultsDom.globalAverageMs ??
+      extractGlobalAverageMsFromText(resultsDom.bodyText) ??
+      extractGlobalAverageMsFromJson(networkJson);
+  }
 
   const payload: CapturePayload = {
     game: game.slug,
@@ -271,6 +313,7 @@ async function captureOnce(
     kind,
     pageUrl: page.url(),
     entries,
+    globalAverageMs,
     raw: dump
       ? { bodyText: dom.bodyText, networkCount: networkJson.length, networkJson }
       : { bodyText: dom.bodyText, networkCount: networkJson.length },
@@ -285,6 +328,9 @@ async function captureOnce(
   }
 
   console.log(`${game.name}: saved ${entries.length} rows to ${jsonPath}`);
+  if (globalAverageMs != null) {
+    console.log(`  LinkedIn avg ${formatMs(globalAverageMs)}`);
+  }
   for (const entry of entries.slice(0, 8)) {
     console.log(`  ${entry.rank ?? "-"}  ${entry.displayName}  ${formatMs(entry.timeMs)}`);
   }

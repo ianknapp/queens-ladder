@@ -1,6 +1,6 @@
 import { GAMES, GAME_SLUGS, type GameSlug } from "@/lib/games";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildDailyRows, buildSeason } from "@/lib/scoring";
+import { buildDailyRows, buildSeason, type SeasonDay } from "@/lib/scoring";
 import type {
   DailyRow,
   GameCell,
@@ -35,6 +35,7 @@ type PuzzleRow = {
   game: string;
   puzzle_date: string;
   puzzle_number: number | null;
+  global_average_ms: number | null;
 };
 
 type SnapshotRow = {
@@ -61,6 +62,7 @@ function emptySeasonCell(): GameSeasonCell {
     wins: 0,
     daysPlayed: 0,
     averageTimeMs: null,
+    belowAveragePct: null,
   };
 }
 
@@ -136,6 +138,7 @@ function applySeasonRow(
     wins: row.wins,
     daysPlayed: row.daysPlayed,
     averageTimeMs: row.averageTimeMs,
+    belowAveragePct: row.belowAveragePct,
   };
   player.seasonPoints += row.points;
   player.seasonWins += row.wins;
@@ -144,8 +147,7 @@ function applySeasonRow(
 export async function getLadder(): Promise<LadderPayload> {
   const supabase = createAdminClient();
 
-  const [{ data: tracked, error: trackedError }, { data: puzzles, error: puzzlesError }] =
-    await Promise.all([
+  const [{ data: tracked, error: trackedError }, puzzleResult] = await Promise.all([
       supabase
         .from("players")
         .select("id, display_name, profile_url, avatar_url, is_tracked")
@@ -153,10 +155,24 @@ export async function getLadder(): Promise<LadderPayload> {
         .order("display_name", { ascending: true }),
       supabase
         .from("puzzles")
-        .select("id, game, puzzle_date, puzzle_number")
+        .select("id, game, puzzle_date, puzzle_number, global_average_ms")
         .in("game", [...GAME_SLUGS])
         .order("puzzle_date", { ascending: false }),
     ]);
+
+  let { data: puzzles, error: puzzlesError } = puzzleResult;
+  if (puzzlesError && /global_average_ms/i.test(puzzlesError.message)) {
+    const fallback = await supabase
+      .from("puzzles")
+      .select("id, game, puzzle_date, puzzle_number")
+      .in("game", [...GAME_SLUGS])
+      .order("puzzle_date", { ascending: false });
+    puzzles = (fallback.data ?? []).map((puzzle) => ({
+      ...puzzle,
+      global_average_ms: null,
+    }));
+    puzzlesError = fallback.error;
+  }
 
   if (trackedError) throw new Error(trackedError.message);
   if (puzzlesError) throw new Error(puzzlesError.message);
@@ -171,6 +187,7 @@ export async function getLadder(): Promise<LadderPayload> {
       puzzleDate: latest?.puzzle_date ?? null,
       puzzleNumber: latest?.puzzle_number ?? null,
       capturedAt: null,
+      globalAverageMs: latest?.global_average_ms ?? null,
     };
   });
 
@@ -266,7 +283,7 @@ export async function getLadder(): Promise<LadderPayload> {
     if (meta) meta.capturedAt = snapshot?.captured_at ?? null;
   }
 
-  const history: Record<GameSlug, DailyRow[][]> = {
+  const history: Record<GameSlug, SeasonDay[]> = {
     queens: [],
     patches: [],
     wend: [],
@@ -281,7 +298,10 @@ export async function getLadder(): Promise<LadderPayload> {
     const daily = toDailyRows(scoresBySnapshot.get(snapshot.id) ?? []).filter(
       (row) => row.isTracked,
     );
-    history[puzzle.game].push(daily);
+    history[puzzle.game].push({
+      rows: daily,
+      globalAverageMs: puzzle.global_average_ms,
+    });
 
     for (const row of daily) {
       if (row.visibility !== "score" || row.timeMs == null) continue;

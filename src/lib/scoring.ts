@@ -1,4 +1,5 @@
 import type { DailyRow, LadderPlayer, LeaderboardEntry, SeasonRow } from "@/lib/types";
+import { percentBelowAverage } from "@/lib/time";
 
 const PODIUM_POINTS = [3, 2, 1] as const;
 
@@ -66,7 +67,12 @@ export function buildDailyRows(
     });
 }
 
-export function buildSeason(days: DailyRow[][]): SeasonRow[] {
+export type SeasonDay = {
+  rows: DailyRow[];
+  globalAverageMs: number | null;
+};
+
+export function buildSeason(days: SeasonDay[]): SeasonRow[] {
   const byPlayer = new Map<
     string,
     {
@@ -77,11 +83,12 @@ export function buildSeason(days: DailyRow[][]): SeasonRow[] {
       wins: number;
       daysPlayed: number;
       times: number[];
+      belowAverage: number[];
     }
   >();
 
   for (const day of days) {
-    for (const row of day.filter((item) => item.isTracked)) {
+    for (const row of day.rows.filter((item) => item.isTracked)) {
       const current = byPlayer.get(row.playerId) ?? {
         displayName: row.displayName,
         profileUrl: row.profileUrl,
@@ -90,31 +97,47 @@ export function buildSeason(days: DailyRow[][]): SeasonRow[] {
         wins: 0,
         daysPlayed: 0,
         times: [],
+        belowAverage: [],
       };
       if (row.visibility === "score" && row.timeMs != null) {
         current.daysPlayed += 1;
         current.times.push(row.timeMs);
         current.points += row.points ?? 0;
         if (row.friendRank === 1) current.wins += 1;
+        if (day.globalAverageMs != null) {
+          const pct = percentBelowAverage(row.timeMs, day.globalAverageMs);
+          if (pct != null) current.belowAverage.push(pct);
+        }
       }
       byPlayer.set(row.playerId, current);
     }
   }
 
   return [...byPlayer.entries()]
-    .map(([playerId, value]) => ({
-      playerId,
-      displayName: value.displayName,
-      profileUrl: value.profileUrl,
-      avatarUrl: value.avatarUrl,
-      points: value.points,
-      wins: value.wins,
-      daysPlayed: value.daysPlayed,
-      averageTimeMs:
-        value.times.length === 0
-          ? null
-          : Math.round(value.times.reduce((sum, time) => sum + time, 0) / value.times.length),
-    }))
+    .map(([playerId, value]) => {
+      let belowAveragePct: number | null = null;
+      if (value.belowAverage.length > 0) {
+        const total = value.belowAverage.reduce((sum, pct) => sum + pct, 0);
+        belowAveragePct = total / value.belowAverage.length;
+      }
+      let averageTimeMs: number | null = null;
+      if (value.times.length > 0) {
+        averageTimeMs = Math.round(
+          value.times.reduce((sum, time) => sum + time, 0) / value.times.length,
+        );
+      }
+      return {
+        playerId,
+        displayName: value.displayName,
+        profileUrl: value.profileUrl,
+        avatarUrl: value.avatarUrl,
+        points: value.points,
+        wins: value.wins,
+        daysPlayed: value.daysPlayed,
+        averageTimeMs,
+        belowAveragePct,
+      };
+    })
     .sort((a, b) => {
       if (b.points !== a.points) return b.points - a.points;
       if (b.wins !== a.wins) return b.wins - a.wins;
@@ -124,7 +147,19 @@ export function buildSeason(days: DailyRow[][]): SeasonRow[] {
     });
 }
 
-export type SeasonRankedPlayer = LadderPlayer & { rank: number };
+export type RankedPlayer = LadderPlayer & { rank: number };
+
+export function compareTodayPlayers(a: LadderPlayer, b: LadderPlayer) {
+  if (b.todayPoints !== a.todayPoints) return b.todayPoints - a.todayPoints;
+  if (b.todayPlayed !== a.todayPlayed) return b.todayPlayed - a.todayPlayed;
+  return a.displayName.localeCompare(b.displayName);
+}
+
+export function rankTodayPlayers(players: LadderPlayer[]): RankedPlayer[] {
+  return [...players]
+    .sort(compareTodayPlayers)
+    .map((player, index) => ({ ...player, rank: index + 1 }));
+}
 
 export function compareSeasonPlayers(a: LadderPlayer, b: LadderPlayer) {
   if (b.seasonPoints !== a.seasonPoints) return b.seasonPoints - a.seasonPoints;
@@ -132,8 +167,38 @@ export function compareSeasonPlayers(a: LadderPlayer, b: LadderPlayer) {
   return a.displayName.localeCompare(b.displayName);
 }
 
-export function rankSeasonPlayers(players: LadderPlayer[]): SeasonRankedPlayer[] {
+export function rankSeasonPlayers(players: LadderPlayer[]): RankedPlayer[] {
   return [...players]
     .sort(compareSeasonPlayers)
     .map((player, index) => ({ ...player, rank: index + 1 }));
+}
+
+export function compareGameWinPlayers(a: LadderPlayer, b: LadderPlayer) {
+  const aWins = totalGameWins(a);
+  const bWins = totalGameWins(b);
+  if (bWins !== aWins) return bWins - aWins;
+  const aPct = meanBelowAverage(a);
+  const bPct = meanBelowAverage(b);
+  if (aPct != null && bPct != null && aPct !== bPct) return bPct - aPct;
+  if (aPct != null && bPct == null) return -1;
+  if (aPct == null && bPct != null) return 1;
+  return a.displayName.localeCompare(b.displayName);
+}
+
+export function rankGameWinPlayers(players: LadderPlayer[]): RankedPlayer[] {
+  return [...players]
+    .sort(compareGameWinPlayers)
+    .map((player, index) => ({ ...player, rank: index + 1 }));
+}
+
+export function totalGameWins(player: LadderPlayer) {
+  return Object.values(player.seasonByGame).reduce((sum, cell) => sum + cell.wins, 0);
+}
+
+export function meanBelowAverage(player: LadderPlayer) {
+  const values = Object.values(player.seasonByGame)
+    .map((cell) => cell.belowAveragePct)
+    .filter((value): value is number => value != null);
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }

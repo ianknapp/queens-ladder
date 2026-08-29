@@ -1,7 +1,8 @@
 import { PlayerAvatar } from "@/components/player-avatar";
 import { GAMES } from "@/lib/games";
+import { rankTodayPlayers } from "@/lib/scoring";
 import { formatMs } from "@/lib/time";
-import type { GameCell, LadderPlayer } from "@/lib/types";
+import type { GameCell, GameMeta, LadderPlayer } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function rankClass(rank: number | null) {
@@ -28,7 +29,13 @@ function TimeCell({ cell }: { cell: GameCell }) {
   );
 }
 
-export function TodayGrid({ players }: { players: LadderPlayer[] }) {
+export function TodayGrid({
+  players,
+  games,
+}: {
+  players: LadderPlayer[];
+  games: GameMeta[];
+}) {
   if (players.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -38,11 +45,15 @@ export function TodayGrid({ players }: { players: LadderPlayer[] }) {
     );
   }
 
+  const ranked = rankTodayPlayers(players);
+  const hasAverage = games.some((game) => game.globalAverageMs != null);
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-xl text-sm">
         <thead>
           <tr className="border-b text-left text-muted-foreground">
+            <th className="w-8 py-2 pr-2 font-medium">#</th>
             <th className="py-2 pr-3 font-medium">Friend</th>
             {GAMES.map((game) => (
               <th key={game.slug} className="px-2 py-2 text-right font-medium">
@@ -53,25 +64,48 @@ export function TodayGrid({ players }: { players: LadderPlayer[] }) {
           </tr>
         </thead>
         <tbody>
-          {players.map((player) => (
-            <tr key={player.playerId} className="border-b border-border/60 last:border-0">
-              <td className="py-2 pr-3">
-                <div className="flex items-center gap-2">
-                  <PlayerAvatar src={player.avatarUrl} />
-                  <span className="truncate">{player.displayName}</span>
-                </div>
-              </td>
-              {GAMES.map((game) => (
-                <td key={game.slug} className="px-2 py-2 text-right">
-                  <TimeCell cell={player.today[game.slug]} />
+          {ranked.map((player) => {
+            let rankTone = "text-muted-foreground";
+            if (player.rank <= 3) rankTone = "font-medium text-foreground";
+
+            return (
+              <tr key={player.playerId} className="border-b border-border/60 last:border-0">
+                <td className={cn("py-2 pr-2 tabular-nums", rankTone)}>{player.rank}</td>
+                <td className="py-2 pr-3">
+                  <div className="flex items-center gap-2">
+                    <PlayerAvatar src={player.avatarUrl} />
+                    <span className="truncate">{player.displayName}</span>
+                  </div>
                 </td>
-              ))}
-              <td className="py-2 pl-3 text-right font-medium tabular-nums">
-                {player.todayPoints}
-              </td>
-            </tr>
-          ))}
+                {GAMES.map((game) => (
+                  <td key={game.slug} className="px-2 py-2 text-right">
+                    <TimeCell cell={player.today[game.slug]} />
+                  </td>
+                ))}
+                <td className="py-2 pl-3 text-right font-medium tabular-nums">
+                  {player.todayPoints}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
+        {hasAverage ? (
+          <tfoot>
+            <tr className="border-t text-muted-foreground">
+              <td className="py-2 pr-2" />
+              <td className="py-2 pr-3">LinkedIn avg</td>
+              {GAMES.map((game) => {
+                const meta = games.find((item) => item.slug === game.slug);
+                return (
+                  <td key={game.slug} className="px-2 py-2 text-right font-mono tabular-nums">
+                    {formatMs(meta?.globalAverageMs ?? null)}
+                  </td>
+                );
+              })}
+              <td className="py-2 pl-3" />
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
     </div>
   );

@@ -148,6 +148,67 @@ export function puzzleNumberFromText(text: string, gameName?: string): number | 
   return null;
 }
 
+export function extractGlobalAverageMsFromText(text: string): number | null {
+  const match = text.match(/today['’]?s\s+avg[:\s]+(\d{1,2}:\d{2})/i);
+  if (!match) return null;
+  return parseClockToMs(match[1]);
+}
+
+const AVERAGE_KEYS = new Set([
+  "todaysavg",
+  "todaysaverage",
+  "todayaverage",
+  "averagetime",
+  "avgtime",
+  "globalaverage",
+  "averagesolvetime",
+  "averagetimeelapsed",
+  "averageduration",
+  "avgdurationms",
+  "averagetimems",
+  "communityaverage",
+]);
+
+function averageFromUnknown(value: unknown): number | null {
+  const clock = asString(value);
+  if (clock) {
+    const fromLabel = extractGlobalAverageMsFromText(clock);
+    if (fromLabel != null) return fromLabel;
+    return parseClockToMs(clock);
+  }
+  const numeric = asNumber(value);
+  if (numeric == null) return null;
+  return numeric > 10_000 ? numeric : numeric * 1000;
+}
+
+export function extractGlobalAverageMsFromJson(data: unknown): number | null {
+  let found: number | null = null;
+  walk(data, (obj) => {
+    if (found != null) return;
+    const subtext =
+      asString(obj.subtext) ??
+      asString(obj.subText) ??
+      asString(obj.subtitle) ??
+      asString(obj.label);
+    if (subtext) {
+      const fromSubtext = extractGlobalAverageMsFromText(subtext);
+      if (fromSubtext != null) {
+        found = fromSubtext;
+        return;
+      }
+    }
+    for (const [key, value] of Object.entries(obj)) {
+      if (!AVERAGE_KEYS.has(key.toLowerCase())) continue;
+      const parsed = averageFromUnknown(value);
+      if (parsed != null) {
+        found = parsed;
+        return;
+      }
+    }
+  });
+  return found;
+}
+
 export function extractEntriesFromBodyText(text: string): LeaderboardEntry[] {
   const cutoff = text.search(/\nSee less\b|\nSend your connections|\nNudge\b/i);
   const slice = cutoff === -1 ? text : text.slice(0, cutoff);

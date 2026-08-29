@@ -25,6 +25,7 @@ export const capturePayloadSchema = z.object({
   kind: z.enum(["scheduled_final", "scheduled_midday", "manual"]),
   pageUrl: z.string(),
   entries: z.array(entrySchema),
+  globalAverageMs: z.number().int().nullable().optional(),
   raw: z.unknown().optional(),
 });
 
@@ -50,6 +51,7 @@ export async function ingestCapture(payload: CapturePayload) {
         game: payload.game,
         puzzle_date: payload.puzzleDate,
         puzzle_number: payload.puzzleNumber,
+        global_average_ms: payload.globalAverageMs ?? null,
       })
       .select("id, puzzle_number")
       .single();
@@ -64,6 +66,13 @@ export async function ingestCapture(payload: CapturePayload) {
       .eq("id", puzzle.id);
   }
 
+  if (payload.globalAverageMs != null) {
+    await supabase
+      .from("puzzles")
+      .update({ global_average_ms: payload.globalAverageMs })
+      .eq("id", puzzle.id);
+  }
+
   const { data: snapshot, error: snapshotError } = await supabase
     .from("snapshots")
     .insert({
@@ -72,6 +81,7 @@ export async function ingestCapture(payload: CapturePayload) {
       kind: payload.kind,
       status: payload.entries.length > 0 ? "success" : "failed",
       visible_count: payload.entries.length,
+      global_average_ms: payload.globalAverageMs ?? null,
       raw_json: {
         pageUrl: payload.pageUrl,
         raw: payload.raw ?? null,

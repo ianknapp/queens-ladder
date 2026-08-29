@@ -24,6 +24,19 @@ export function formatMs(timeMs: number | null): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+export function percentBelowAverage(timeMs: number, averageMs: number): number | null {
+  if (averageMs <= 0) return null;
+  return ((averageMs - timeMs) / averageMs) * 100;
+}
+
+export function formatPct(value: number | null): string {
+  if (value == null) return "—";
+  const rounded = Math.round(value);
+  if (rounded > 0) return `${rounded}%`;
+  if (rounded < 0) return `−${Math.abs(rounded)}%`;
+  return "0%";
+}
+
 export function profileIdFromUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const match = url.match(/linkedin\.com\/in\/([^/?#]+)/i);

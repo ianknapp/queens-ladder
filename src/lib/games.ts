@@ -27,8 +27,12 @@ export function gameBySlug(slug: GameSlug): GameDef {
   return game;
 }
 
+export function resultsUrl(slug: GameSlug): string {
+  return `https://www.linkedin.com/games/${gameBySlug(slug).path}/results/`;
+}
+
 export function leaderboardUrl(slug: GameSlug): string {
-  return `https://www.linkedin.com/games/${gameBySlug(slug).path}/results/leaderboard/connections/`;
+  return `${resultsUrl(slug)}leaderboard/connections/`;
 }
 
 export function parseGameArgs(raw: string | null): GameDef[] {

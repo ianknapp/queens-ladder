@@ -34,7 +34,6 @@ export function SeasonTable({ players }: { players: LadderPlayer[] }) {
               </th>
             ))}
             <th className="py-2 pl-3 text-right font-medium">Total</th>
-            <th className="py-2 pl-3 text-right font-medium">Wins</th>
             <th className="py-2 pl-3 text-right font-medium">Days</th>
           </tr>
         </thead>
@@ -81,7 +80,6 @@ export function SeasonTable({ players }: { players: LadderPlayer[] }) {
                     </span>
                   ) : null}
                 </td>
-                <td className="py-2 pl-3 text-right tabular-nums">{player.seasonWins}</td>
                 <td className="py-2 pl-3 text-right tabular-nums text-muted-foreground">
                   {player.seasonDays}
                 </td>
