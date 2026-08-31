@@ -53,7 +53,7 @@ export default async function HomePage() {
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Today</h1>
             <p className="text-sm text-muted-foreground">
-              {date ?? "No capture yet"} · 3 / 2 / 1 per game
+              {date ?? "No capture yet"} · 3 / 2 / 1 per game · ties share
             </p>
           </div>
           <p className="text-xs text-muted-foreground">

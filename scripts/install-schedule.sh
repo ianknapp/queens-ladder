@@ -9,7 +9,7 @@ UID_NUM="$(id -u)"
 mkdir -p "$HOME/Library/LaunchAgents" "$ROOT/data"
 chmod +x "$ROOT/scripts/capture-nightly.sh"
 
-# 5:00pm local Mac time, Monday–Friday (launchd Weekday 1–5).
+# 4:55pm local Mac time, Monday–Friday (launchd Weekday 1–5).
 weekday_interval() {
   local day="$1"
   cat <<INNER
@@ -17,9 +17,9 @@ weekday_interval() {
       <key>Weekday</key>
       <integer>${day}</integer>
       <key>Hour</key>
-      <integer>17</integer>
+      <integer>16</integer>
       <key>Minute</key>
-      <integer>0</integer>
+      <integer>55</integer>
     </dict>
 INNER
 }
@@ -70,8 +70,8 @@ launchctl bootstrap "gui/${UID_NUM}" "$DEST"
 launchctl enable "gui/${UID_NUM}/${LABEL}"
 
 echo "Installed LaunchAgent ${LABEL}"
-echo "Runs Mon–Fri at 5:00pm local Mac time."
+echo "Runs Mon–Fri at 4:55pm local Mac time."
 echo "Logs: ${ROOT}/data/capture.log"
 echo
-echo "This Mac must be awake and logged in at 5pm. Sleep/closed lid skips that day."
+echo "This Mac must be awake and logged in at 4:55pm. Sleep/closed lid skips that day."
 echo "Unload later with: npm run schedule:uninstall"

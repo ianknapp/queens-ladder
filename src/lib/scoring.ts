@@ -19,13 +19,22 @@ export function rankFriends(entries: LeaderboardEntry[]): Map<string, { friendRa
     .sort(timeSort);
 
   const result = new Map<string, { friendRank: number; points: number }>();
-  ranked.forEach((entry, index) => {
-    const key = entry.profileId ?? entry.profileUrl ?? entry.displayName;
-    result.set(key, {
-      friendRank: index + 1,
-      points: PODIUM_POINTS[index] ?? 0,
-    });
-  });
+  let place = 1;
+  let i = 0;
+  while (i < ranked.length) {
+    let groupEnd = i + 1;
+    while (groupEnd < ranked.length && timeSort(ranked[i], ranked[groupEnd]) === 0) {
+      groupEnd += 1;
+    }
+    const points = PODIUM_POINTS[place - 1] ?? 0;
+    for (let j = i; j < groupEnd; j++) {
+      const entry = ranked[j];
+      const key = entry.profileId ?? entry.profileUrl ?? entry.displayName;
+      result.set(key, { friendRank: place, points });
+    }
+    place += 1;
+    i = groupEnd;
+  }
   return result;
 }
 

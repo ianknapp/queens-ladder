@@ -11,6 +11,7 @@
     "capture:login": "tsx collector/capture.ts --login --headed",
     "capture:scheduled": "tsx collector/capture.ts --kind=scheduled_final",
     "ingest": "tsx collector/ingest-file.ts",
+    "avatars:backfill": "tsx collector/backfill-avatars.ts",
     "schedule:install": "bash scripts/install-schedule.sh",
     "schedule:uninstall": "bash scripts/uninstall-schedule.sh"
   },

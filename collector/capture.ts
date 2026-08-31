@@ -15,6 +15,7 @@ import {
 } from "../src/lib/parse-leaderboard";
 import { formatMs, pacificDate } from "../src/lib/time";
 import type { CaptureKind, CapturePayload, LeaderboardEntry } from "../src/lib/types";
+import { hostLeaderboardAvatars } from "./host-avatars";
 import { loadDotEnv } from "./load-env";
 
 const GAMES_HUB_URL = "https://www.linkedin.com/games/";
@@ -70,6 +71,19 @@ function extractFromDom(gameName: string): DomCapture {
       container.querySelector(".pr-connections-leaderboard-player__subtitle-copy")?.textContent ?? "";
     const photoName = photo?.getAttribute("alt")?.trim() ?? "";
     const displayName = name === "You" && photoName ? photoName : name;
+    const avatarCandidates = [
+      photo?.currentSrc,
+      photo?.getAttribute("data-delayed-url"),
+      photo?.getAttribute("data-src"),
+      photo?.getAttribute("src"),
+    ];
+    let avatarUrl: string | null = null;
+    for (const candidate of avatarCandidates) {
+      if (candidate && /^https?:/i.test(candidate) && !/static\.licdn\.com/i.test(candidate)) {
+        avatarUrl = candidate;
+        break;
+      }
+    }
 
     entries.push({
       rank: /^\d+$/.test(rankText) ? Number(rankText) : inferredRank,
@@ -77,7 +91,7 @@ function extractFromDom(gameName: string): DomCapture {
       profileUrl: null,
       profileId: null,
       linkedinUrn: null,
-      avatarUrl: photo?.getAttribute("src") ?? null,
+      avatarUrl,
       timeMs: (Number(timeMatch[1]) * 60 + Number(timeMatch[2])) * 1000,
       visibility: "score",
       noHints: /no hints/i.test(subtitle) ? true : null,
@@ -121,6 +135,19 @@ function extractFromDom(gameName: string): DomCapture {
 
 async function extractFromFrame(frame: Frame | Page, gameName: string): Promise<DomCapture> {
   return frame.evaluate(extractFromDom, gameName);
+}
+
+async function downloadAvatar(page: Page, url: string) {
+  try {
+    const response = await page.request.get(url, { timeout: 20_000 });
+    if (!response.ok()) return null;
+    return {
+      bytes: Buffer.from(await response.body()),
+      contentType: response.headers()["content-type"] ?? "application/octet-stream",
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function extractFromPage(page: Page, gameName: string): Promise<DomCapture> {
@@ -283,10 +310,15 @@ async function captureOnce(
   const dom = await extractFromPage(page, game.name);
   const fromNetwork = mergeEntries(...networkJson.map((item) => extractEntriesFromJson(item)));
   const fromText = extractEntriesFromBodyText(dom.bodyText);
-  const entries =
+  let entries =
     dom.entries.length > 0
       ? mergeEntries(dom.entries, fromNetwork)
       : mergeEntries(fromNetwork, fromText);
+  const hosted = await hostLeaderboardAvatars(entries, (url) => downloadAvatar(page, url));
+  entries = hosted.entries;
+  if (hosted.uploaded > 0 || hosted.failed > 0) {
+    console.log(`  avatars: ${hosted.uploaded} stored, ${hosted.failed} failed`);
+  }
   const puzzleNumber = dom.puzzleNumber ?? puzzleNumberFromText(dom.bodyText, game.name);
   let globalAverageMs =
     dom.globalAverageMs ??

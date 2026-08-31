@@ -18,7 +18,7 @@ export function PlayerAvatar({
   const dim = SIZE_CLASS[size];
   if (src) {
     return (
-      // LinkedIn CDNs vary; native img avoids next/image remote config.
+      // Hosted from our public bucket; native img avoids next/image remote config.
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}

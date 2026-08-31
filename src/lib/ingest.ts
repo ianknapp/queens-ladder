@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { preferAvatarUrl } from "@/lib/avatars";
 import { GAME_SLUGS } from "@/lib/games";
 import { profileIdFromUrl } from "@/lib/time";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -125,7 +126,7 @@ export async function ingestCapture(payload: CapturePayload) {
           .from("players")
           .update({
             display_name: entry.displayName || existing.display_name,
-            avatar_url: entry.avatarUrl ?? existing.avatar_url,
+            avatar_url: preferAvatarUrl(entry.avatarUrl, existing.avatar_url),
             profile_url: entry.profileUrl ?? existing.profile_url,
             profile_id: profileId ?? existing.profile_id,
             linkedin_urn: entry.linkedinUrn ?? existing.linkedin_urn,
@@ -138,10 +139,22 @@ export async function ingestCapture(payload: CapturePayload) {
     if (!playerId && entry.displayName) {
       const { data: byName } = await supabase
         .from("players")
-        .select("id")
+        .select("id, display_name, avatar_url, profile_url, profile_id, linkedin_urn")
         .eq("display_name", entry.displayName)
         .maybeSingle();
-      if (byName) playerId = byName.id;
+      if (byName) {
+        playerId = byName.id;
+        await supabase
+          .from("players")
+          .update({
+            avatar_url: preferAvatarUrl(entry.avatarUrl, byName.avatar_url),
+            profile_url: entry.profileUrl ?? byName.profile_url,
+            profile_id: profileId ?? byName.profile_id,
+            linkedin_urn: entry.linkedinUrn ?? byName.linkedin_urn,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", byName.id);
+      }
     }
 
     if (!playerId) {

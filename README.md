@@ -9,7 +9,7 @@ You create the free Supabase and Vercel projects. This repo is the local app + M
 ## 1. Supabase
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. SQL Editor → paste and run `supabase/migrations/20260813120000_init.sql`.
+2. SQL Editor → paste and run `supabase/migrations/20260813120000_init.sql`, then `supabase/migrations/20260831160000_avatars_bucket.sql`.
 3. Project Settings → API: copy **Project URL**, **anon/publishable key**, and **service role** key.
 
 ## 2. Local env
@@ -42,7 +42,7 @@ A browser window opens on the LinkedIn sign-in page. Log in there, then **press 
 npm run capture
 ```
 
-That writes `data/<game>-YYYY-MM-DD.json` for each game and posts rows straight to Supabase (the Next server does not need to be running). You have to have finished today's puzzle for a game or its connections board may be empty. To capture one game:
+That writes `data/<game>-YYYY-MM-DD.json` for each game, copies profile photos into a public Supabase Storage bucket, and posts rows straight to Supabase (the Next server does not need to be running). You have to have finished today's puzzle for a game or its connections board may be empty. To capture one game:
 
 ```bash
 npm run capture -- --game=zip
@@ -80,14 +80,26 @@ The website runs on Vercel. The LinkedIn collector does **not** — it needs Pla
 npm run schedule:install
 ```
 
-That installs a LaunchAgent that runs **Monday–Friday at 5:00pm local Mac time**. Logs go to `data/capture.log`.
+That installs a LaunchAgent that runs **Monday–Friday at 4:55pm local Mac time**. Logs go to `data/capture.log`.
 
-This Mac must be **awake and logged in** at 5pm. Sleep or a closed lid skips that day — re-run `npm run capture` when you are back.
+This Mac must be **awake and logged in** at 4:55pm. Sleep or a closed lid skips that day — re-run `npm run capture` when you are back.
 
 Unload it with `npm run schedule:uninstall`.
 
+### Slack reminder (free)
+
+Slack’s built-in `/remind` is free on the Free plan and runs on Slack’s servers, so it still fires if this Mac is asleep. In the channel you want, paste:
+
+```
+/remind #channel "LinkedIn games — finish Queens, Patches, Wend, Mini Sudoku, and Zip. Scores lock at 4:55pm." every weekday at 4:00pm
+```
+
+Swap `#channel` for the real channel name. Change `4:00pm` if you want a different heads-up. Slackbot posts it; no paid plan, app, or webhook required.
+
+To cancel later: `/remind list`, then delete that reminder.
+
 ## Scoring
 
-Among tracked friends with a visible time: **3 / 2 / 1** for 1st / 2nd / 3rd, scored separately for each game (up to 15 points in a day). Season total is the sum across games. Ties break on wins, then name.
+Among tracked friends with a visible time: **3 / 2 / 1** for 1st / 2nd / 3rd, scored separately for each game (up to 15 points in a day). Same time, hints, and mistakes share the place and the points; the next unique result is the next place (two tied for first both get 3, then second and third). Season total is the sum across games. Season ranking ties break on wins, then name.
 
 LinkedIn has no public games API. The collector uses your own session to read a page you can already see. Automated access can still get the account challenged; the Friends page has a manual score form as a fallback.
