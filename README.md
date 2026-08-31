@@ -72,17 +72,17 @@ Then open **Friends** and toggle the 5–10 people who should appear on the ladd
 
 Do not run the LinkedIn collector on Vercel. It needs your logged-in Chrome profile on this Mac.
 
-## Nightly job
+## Weekday capture job
 
-The collector has to stay on this Mac (logged-in Chrome profile). After `capture:login` works once:
+The website runs on Vercel. The LinkedIn collector does **not** — it needs Playwright plus your logged-in Chrome profile, so it only runs on this Mac. After `capture:login` works once:
 
 ```bash
 npm run schedule:install
 ```
 
-That installs a LaunchAgent that runs at **2:30am Eastern / 11:30pm Pacific** every day. Logs go to `data/capture.log`.
+That installs a LaunchAgent that runs **Monday–Friday at 5:00pm local Mac time**. Logs go to `data/capture.log`.
 
-This Mac must be **awake and logged in**. If it sleeps overnight, that day's board is missed — re-run `npm run capture` in the morning, or keep the machine from sleeping.
+This Mac must be **awake and logged in** at 5pm. Sleep or a closed lid skips that day — re-run `npm run capture` when you are back.
 
 Unload it with `npm run schedule:uninstall`.
 

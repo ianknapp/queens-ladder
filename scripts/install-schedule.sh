@@ -9,7 +9,21 @@ UID_NUM="$(id -u)"
 mkdir -p "$HOME/Library/LaunchAgents" "$ROOT/data"
 chmod +x "$ROOT/scripts/capture-nightly.sh"
 
-# 02:30 America/New_York = 11:30pm Pacific year-round.
+# 5:00pm local Mac time, Monday–Friday (launchd Weekday 1–5).
+weekday_interval() {
+  local day="$1"
+  cat <<INNER
+    <dict>
+      <key>Weekday</key>
+      <integer>${day}</integer>
+      <key>Hour</key>
+      <integer>17</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+INNER
+}
+
 cat >"$DEST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -32,12 +46,13 @@ cat >"$DEST" <<EOF
     <string>${HOME}</string>
   </dict>
   <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>
-    <integer>2</integer>
-    <key>Minute</key>
-    <integer>30</integer>
-  </dict>
+  <array>
+$(weekday_interval 1)
+$(weekday_interval 2)
+$(weekday_interval 3)
+$(weekday_interval 4)
+$(weekday_interval 5)
+  </array>
   <key>StandardOutPath</key>
   <string>${ROOT}/data/capture.stdout.log</string>
   <key>StandardErrorPath</key>
@@ -55,8 +70,8 @@ launchctl bootstrap "gui/${UID_NUM}" "$DEST"
 launchctl enable "gui/${UID_NUM}/${LABEL}"
 
 echo "Installed LaunchAgent ${LABEL}"
-echo "Runs daily at 2:30am Eastern (11:30pm Pacific)."
+echo "Runs Mon–Fri at 5:00pm local Mac time."
 echo "Logs: ${ROOT}/data/capture.log"
 echo
-echo "This Mac must be awake and logged in. If it sleeps overnight, capture will miss that day."
+echo "This Mac must be awake and logged in at 5pm. Sleep/closed lid skips that day."
 echo "Unload later with: npm run schedule:uninstall"
