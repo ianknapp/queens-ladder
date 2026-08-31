@@ -78,7 +78,7 @@ export default async function HomePage() {
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-xl font-semibold tracking-tight">Game wins</h2>
             <p className="text-sm text-muted-foreground">
-              first among friends · % faster than LinkedIn average
+              ranked by firsts, then the % faster than LinkedIn average.
             </p>
           </div>
           <GameWinsTable players={ladder.players} />
