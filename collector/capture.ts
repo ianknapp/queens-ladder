@@ -215,8 +215,19 @@ async function gotoOrRevive(context: BrowserContext, page: Page, url: string) {
   }
 }
 
-async function ensureLoggedIn(context: BrowserContext, page: Page, forceLogin: boolean) {
+async function ensureLoggedIn(
+  context: BrowserContext,
+  page: Page,
+  forceLogin: boolean,
+  headed: boolean,
+) {
   if (!forceLogin && (await isLoggedIn(context))) return page;
+
+  if (!headed) {
+    throw new Error(
+      "No LinkedIn session cookie in .playwright-profile. Run `npm run capture:login` once (headed), then retry headless.",
+    );
+  }
 
   console.log("Leave the Chromium window open. Navigating to LinkedIn sign-in now.");
   page = await gotoOrRevive(context, page, LOGIN_URL);
@@ -438,9 +449,11 @@ async function main() {
 
   const forceLogin = hasFlag("--login");
   const dump = hasFlag("--dump");
-  const headed = forceLogin || hasFlag("--headed") || !hasFlag("--headless");
+  const headed = forceLogin || hasFlag("--headed");
   const kind = (argValue("--kind") as CaptureKind | null) ?? "manual";
   const games = parseGameArgs(argValue("--game"));
+
+  console.log(headed ? "Running headed Chromium." : "Running headless Chromium.");
 
   const networkJson: unknown[] = [];
   const context = await chromium.launchPersistentContext(PROFILE_DIR, {
@@ -473,7 +486,7 @@ async function main() {
   await page.bringToFront().catch(() => undefined);
 
   try {
-    page = await ensureLoggedIn(context, page, forceLogin);
+    page = await ensureLoggedIn(context, page, forceLogin, headed);
 
     let captured = 0;
     let ingested = 0;

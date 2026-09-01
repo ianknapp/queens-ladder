@@ -9,7 +9,7 @@
     "lint": "eslint",
     "capture": "tsx collector/capture.ts",
     "capture:login": "tsx collector/capture.ts --login --headed",
-    "capture:scheduled": "tsx collector/capture.ts --kind=scheduled_final",
+    "capture:scheduled": "tsx collector/capture.ts --headless --kind=scheduled_final",
     "ingest": "tsx collector/ingest-file.ts",
     "avatars:backfill": "tsx collector/backfill-avatars.ts",
     "schedule:install": "bash scripts/install-schedule.sh",

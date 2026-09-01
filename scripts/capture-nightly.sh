@@ -10,6 +10,6 @@ LOG="$ROOT/data/capture.log"
 
 {
   echo "===== $(date '+%Y-%m-%d %H:%M:%S %Z') capture start ====="
-  npm run capture -- --kind=scheduled_final
+  npm run capture -- --headless --kind=scheduled_final
   echo "===== $(date '+%Y-%m-%d %H:%M:%S %Z') capture done ====="
 } >>"$LOG" 2>&1

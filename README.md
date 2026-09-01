@@ -36,13 +36,13 @@ First run (headed, so you can log into LinkedIn):
 npm run capture:login
 ```
 
-A browser window opens on the LinkedIn sign-in page. Log in there, then **press Enter in the terminal**. The script will not continue or close until you do. Stay logged in in that Chrome profile. Later runs:
+A browser window opens on the LinkedIn sign-in page. Log in there, then **press Enter in the terminal**. The script will not continue or close until you do. Stay logged in in that Chrome profile. Later runs are **headless** (no window):
 
 ```bash
 npm run capture
 ```
 
-That writes `data/<game>-YYYY-MM-DD.json` for each game, copies profile photos into a public Supabase Storage bucket, and posts rows straight to Supabase (the Next server does not need to be running). You have to have finished today's puzzle for a game or its connections board may be empty. To capture one game:
+That reuses `.playwright-profile`, writes `data/<game>-YYYY-MM-DD.json` for each game, copies profile photos into a public Supabase Storage bucket, and posts rows straight to Supabase (the Next server does not need to be running). You have to have finished today's puzzle for a game or its connections board may be empty. Pass `--headed` if you want to watch the browser. To capture one game:
 
 ```bash
 npm run capture -- --game=zip
