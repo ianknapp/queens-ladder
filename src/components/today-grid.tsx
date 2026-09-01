@@ -1,6 +1,6 @@
 import { PlayerAvatar } from "@/components/player-avatar";
 import { GAMES } from "@/lib/games";
-import { rankTodayPlayers } from "@/lib/scoring";
+import { formatPlace, MAX_PLACE_POINTS, pointsForPlace, rankTodayPlayers } from "@/lib/scoring";
 import { formatMs } from "@/lib/time";
 import type { GameCell, GameMeta, LadderPlayer } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -12,18 +12,40 @@ function rankClass(rank: number | null) {
 
 function TimeCell({ cell }: { cell: GameCell }) {
   if (cell.visibility === "played_only") {
-    return <span className="text-muted-foreground">hid</span>;
+    return (
+      <span className="flex flex-col items-end leading-tight">
+        <span className="text-muted-foreground">hid</span>
+        <span className="text-[11px] tabular-nums text-muted-foreground">
+          {cell.points ?? MAX_PLACE_POINTS}
+        </span>
+      </span>
+    );
   }
+
   if (cell.timeMs == null) {
-    return <span className="text-muted-foreground/40">—</span>;
+    if (cell.points == null) {
+      return <span className="text-muted-foreground/40">—</span>;
+    }
+    return (
+      <span className="flex flex-col items-end leading-tight">
+        <span className="text-muted-foreground/40">—</span>
+        <span className="text-[11px] tabular-nums text-muted-foreground">{cell.points}</span>
+      </span>
+    );
   }
+
   return (
-    <span className={cn("font-mono tabular-nums", rankClass(cell.friendRank))}>
-      {formatMs(cell.timeMs)}
-      {cell.friendRank != null && cell.friendRank <= 3 ? (
-        <sup className="ml-0.5 text-[10px] font-sans font-medium text-muted-foreground">
-          {cell.friendRank}
-        </sup>
+    <span className="flex flex-col items-end leading-tight">
+      <span className={cn("font-mono tabular-nums", rankClass(cell.friendRank))}>
+        {formatMs(cell.timeMs)}
+      </span>
+      {cell.friendRank != null ? (
+        <span
+          className="text-[11px] tabular-nums text-muted-foreground"
+          title={`${formatPlace(cell.friendRank)} · ${cell.points ?? pointsForPlace(cell.friendRank)} pts`}
+        >
+          {formatPlace(cell.friendRank)}
+        </span>
       ) : null}
     </span>
   );

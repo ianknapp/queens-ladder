@@ -53,7 +53,7 @@ export default async function HomePage() {
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Today</h1>
             <p className="text-sm text-muted-foreground">
-              {date ?? "No capture yet"} · 3 / 2 / 1 per game · ties share
+              {date ?? "No capture yet"} · place points, 10 max · lowest wins
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -67,7 +67,7 @@ export default async function HomePage() {
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-xl font-semibold tracking-tight">Season</h2>
             <p className="text-sm text-muted-foreground">
-              {ladder.trackedCount} tracked · ranked by points, then wins
+              {ladder.trackedCount} tracked · lowest points, then wins
             </p>
           </div>
           <SeasonPodium players={ladder.players} />

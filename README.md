@@ -100,6 +100,8 @@ To cancel later: `/remind list`, then delete that reminder.
 
 ## Scoring
 
-Among tracked friends with a visible time: **3 / 2 / 1** for 1st / 2nd / 3rd, scored separately for each game (up to 15 points in a day). Same time, hints, and mistakes share the place and the points; the next unique result is the next place (two tied for first both get 3, then second and third). Season total is the sum across games. Season ranking ties break on wins, then name.
+Among tracked friends with a visible time, **place is the score**: 1st = 1 point, 2nd = 2, …, 10th = 10. Worse than 10th still counts as 10. Totals are the sum across games; **lowest points win**.
+
+Ties share a place and consume the slots under them (standard competition ranking). Three people tied for first all get 1; the next person is 4th and gets 4. Hiding a time, missing a captured game, or not showing up on the board counts as 10 so sitting out cannot beat playing. Season ranking ties break on wins, then name.
 
 LinkedIn has no public games API. The collector uses your own session to read a page you can already see. Automated access can still get the account challenged; the Friends page has a manual score form as a fallback.

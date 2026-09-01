@@ -39,10 +39,10 @@ export function SeasonTable({ players }: { players: LadderPlayer[] }) {
         </thead>
         <tbody>
           {ranked.map((player) => {
-            const behind = leaderPoints - player.seasonPoints;
-            let share = 0;
-            if (leaderPoints > 0) {
-              share = Math.round((player.seasonPoints / leaderPoints) * 100);
+            const over = player.seasonPoints - leaderPoints;
+            let share = 100;
+            if (player.seasonPoints > 0 && leaderPoints >= 0) {
+              share = Math.round((leaderPoints / player.seasonPoints) * 100);
             }
 
             return (
@@ -74,9 +74,9 @@ export function SeasonTable({ players }: { players: LadderPlayer[] }) {
                 ))}
                 <td className="py-2 pl-3 text-right">
                   <span className="font-medium tabular-nums">{player.seasonPoints}</span>
-                  {behind > 0 ? (
+                  {over > 0 ? (
                     <span className="ml-1 text-[11px] tabular-nums text-muted-foreground">
-                      −{behind}
+                      +{over}
                     </span>
                   ) : null}
                 </td>

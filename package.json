@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "tsx --test src/lib/scoring.test.ts",
     "capture": "tsx collector/capture.ts",
     "capture:login": "tsx collector/capture.ts --login --headed",
     "capture:scheduled": "tsx collector/capture.ts --headless --kind=scheduled_final",

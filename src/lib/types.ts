@@ -39,7 +39,7 @@ export type DailyRow = {
   isTracked: boolean;
   linkedinRank: number | null;
   timeMs: number | null;
-  visibility: ScoreVisibility;
+  visibility: ScoreVisibility | null;
   friendRank: number | null;
   points: number | null;
 };

@@ -1,7 +1,15 @@
+import { GAMES } from "@/lib/games";
 import type { DailyRow, LadderPlayer, LeaderboardEntry, SeasonRow } from "@/lib/types";
 import { percentBelowAverage } from "@/lib/time";
 
-const PODIUM_POINTS = [3, 2, 1] as const;
+export const MAX_PLACE_POINTS = 10;
+
+export type TrackedPlayerRef = {
+  playerId: string;
+  displayName: string;
+  profileUrl: string | null;
+  avatarUrl: string | null;
+};
 
 function timeSort(a: { timeMs: number | null; noHints: boolean | null; noMistakes: boolean | null }, b: typeof a) {
   if (a.timeMs == null && b.timeMs == null) return 0;
@@ -11,6 +19,32 @@ function timeSort(a: { timeMs: number | null; noHints: boolean | null; noMistake
   if (Boolean(a.noHints) !== Boolean(b.noHints)) return a.noHints ? -1 : 1;
   if (Boolean(a.noMistakes) !== Boolean(b.noMistakes)) return a.noMistakes ? -1 : 1;
   return 0;
+}
+
+function entryKey(entry: { profileId?: string | null; profileUrl?: string | null; displayName: string }) {
+  return entry.profileId ?? entry.profileUrl ?? entry.displayName;
+}
+
+export function pointsForPlace(place: number) {
+  if (place < 1) return MAX_PLACE_POINTS;
+  return Math.min(place, MAX_PLACE_POINTS);
+}
+
+export function formatPlace(place: number) {
+  const remainder100 = place % 100;
+  if (remainder100 >= 11 && remainder100 <= 13) return `${place}th`;
+  const remainder10 = place % 10;
+  if (remainder10 === 1) return `${place}st`;
+  if (remainder10 === 2) return `${place}nd`;
+  if (remainder10 === 3) return `${place}rd`;
+  return `${place}th`;
+}
+
+export function hasVisibleScore(row: {
+  visibility: DailyRow["visibility"];
+  timeMs: number | null;
+}): row is { visibility: "score"; timeMs: number } {
+  return row.visibility === "score" && row.timeMs != null;
 }
 
 export function rankFriends(entries: LeaderboardEntry[]): Map<string, { friendRank: number; points: number }> {
@@ -26,13 +60,12 @@ export function rankFriends(entries: LeaderboardEntry[]): Map<string, { friendRa
     while (groupEnd < ranked.length && timeSort(ranked[i], ranked[groupEnd]) === 0) {
       groupEnd += 1;
     }
-    const points = PODIUM_POINTS[place - 1] ?? 0;
+    const points = pointsForPlace(place);
     for (let j = i; j < groupEnd; j++) {
       const entry = ranked[j];
-      const key = entry.profileId ?? entry.profileUrl ?? entry.displayName;
-      result.set(key, { friendRank: place, points });
+      result.set(entryKey(entry), { friendRank: place, points });
     }
-    place += 1;
+    place += groupEnd - i;
     i = groupEnd;
   }
   return result;
@@ -53,8 +86,7 @@ export function buildDailyRows(
 
   return rows
     .map((row) => {
-      const key = row.profileId ?? row.profileUrl ?? row.displayName;
-      const friend = row.isTracked ? friendRanks.get(key) : undefined;
+      const friend = row.isTracked ? friendRanks.get(entryKey(row)) : undefined;
       return {
         playerId: row.playerId,
         displayName: row.displayName,
@@ -71,9 +103,54 @@ export function buildDailyRows(
     .sort((a, b) => {
       if (a.isTracked !== b.isTracked) return a.isTracked ? -1 : 1;
       if (a.friendRank != null && b.friendRank != null) return a.friendRank - b.friendRank;
+      if (a.friendRank != null) return -1;
+      if (b.friendRank != null) return 1;
       if (a.timeMs != null && b.timeMs != null) return a.timeMs - b.timeMs;
       return (a.linkedinRank ?? 9999) - (b.linkedinRank ?? 9999);
     });
+}
+
+export function ensureTrackedPlaceScores(
+  rows: DailyRow[],
+  tracked: TrackedPlayerRef[],
+  captured: boolean,
+): DailyRow[] {
+  if (!captured) return rows.filter((row) => row.isTracked);
+
+  const byId = new Map<string, DailyRow>();
+  for (const row of rows) {
+    if (!row.isTracked) continue;
+    byId.set(row.playerId, row);
+  }
+
+  for (const player of tracked) {
+    const existing = byId.get(player.playerId);
+    if (existing) {
+      if (existing.friendRank == null) {
+        byId.set(player.playerId, { ...existing, points: MAX_PLACE_POINTS });
+      }
+      continue;
+    }
+    byId.set(player.playerId, {
+      playerId: player.playerId,
+      displayName: player.displayName,
+      profileUrl: player.profileUrl,
+      avatarUrl: player.avatarUrl,
+      isTracked: true,
+      linkedinRank: null,
+      timeMs: null,
+      visibility: null,
+      friendRank: null,
+      points: MAX_PLACE_POINTS,
+    });
+  }
+
+  return [...byId.values()].sort((a, b) => {
+    if (a.friendRank != null && b.friendRank != null) return a.friendRank - b.friendRank;
+    if (a.friendRank != null) return -1;
+    if (b.friendRank != null) return 1;
+    return a.displayName.localeCompare(b.displayName);
+  });
 }
 
 export type SeasonDay = {
@@ -108,10 +185,10 @@ export function buildSeason(days: SeasonDay[]): SeasonRow[] {
         times: [],
         belowAverage: [],
       };
-      if (row.visibility === "score" && row.timeMs != null) {
+      current.points += row.points ?? 0;
+      if (hasVisibleScore(row)) {
         current.daysPlayed += 1;
         current.times.push(row.timeMs);
-        current.points += row.points ?? 0;
         if (row.friendRank === 1) current.wins += 1;
         if (day.globalAverageMs != null) {
           const pct = percentBelowAverage(row.timeMs, day.globalAverageMs);
@@ -148,7 +225,7 @@ export function buildSeason(days: SeasonDay[]): SeasonRow[] {
       };
     })
     .sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
+      if (a.points !== b.points) return a.points - b.points;
       if (b.wins !== a.wins) return b.wins - a.wins;
       if (a.averageTimeMs == null) return 1;
       if (b.averageTimeMs == null) return -1;
@@ -158,8 +235,17 @@ export function buildSeason(days: SeasonDay[]): SeasonRow[] {
 
 export type RankedPlayer = LadderPlayer & { rank: number };
 
+export function countTodayWins(player: LadderPlayer) {
+  return GAMES.filter((game) => player.today[game.slug].friendRank === 1).length;
+}
+
 export function compareTodayPlayers(a: LadderPlayer, b: LadderPlayer) {
-  if (b.todayPoints !== a.todayPoints) return b.todayPoints - a.todayPoints;
+  const aScored = a.todayPlayed > 0 || a.todayPoints > 0;
+  const bScored = b.todayPlayed > 0 || b.todayPoints > 0;
+  if (aScored !== bScored) return aScored ? -1 : 1;
+  if (a.todayPoints !== b.todayPoints) return a.todayPoints - b.todayPoints;
+  const winDiff = countTodayWins(b) - countTodayWins(a);
+  if (winDiff !== 0) return winDiff;
   if (b.todayPlayed !== a.todayPlayed) return b.todayPlayed - a.todayPlayed;
   return a.displayName.localeCompare(b.displayName);
 }
@@ -171,7 +257,10 @@ export function rankTodayPlayers(players: LadderPlayer[]): RankedPlayer[] {
 }
 
 export function compareSeasonPlayers(a: LadderPlayer, b: LadderPlayer) {
-  if (b.seasonPoints !== a.seasonPoints) return b.seasonPoints - a.seasonPoints;
+  const aScored = a.seasonDays > 0 || a.seasonPoints > 0;
+  const bScored = b.seasonDays > 0 || b.seasonPoints > 0;
+  if (aScored !== bScored) return aScored ? -1 : 1;
+  if (a.seasonPoints !== b.seasonPoints) return a.seasonPoints - b.seasonPoints;
   if (b.seasonWins !== a.seasonWins) return b.seasonWins - a.seasonWins;
   return a.displayName.localeCompare(b.displayName);
 }

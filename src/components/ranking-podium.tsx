@@ -1,6 +1,5 @@
 import { PlayerAvatar } from "@/components/player-avatar";
-import { GAMES } from "@/lib/games";
-import { rankSeasonPlayers, rankTodayPlayers } from "@/lib/scoring";
+import { countTodayWins, formatPlace, rankSeasonPlayers, rankTodayPlayers } from "@/lib/scoring";
 import type { LadderPlayer } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -13,19 +12,9 @@ export type PodiumEntry = {
   detail: string;
 };
 
-function placeLabel(rank: number) {
-  if (rank === 1) return "1st";
-  if (rank === 2) return "2nd";
-  return "3rd";
-}
-
 function countLabel(count: number, singular: string, pluralWord: string) {
   if (count === 1) return `1 ${singular}`;
   return `${count} ${pluralWord}`;
-}
-
-function todayWinCount(player: LadderPlayer) {
-  return GAMES.filter((game) => player.today[game.slug].friendRank === 1).length;
 }
 
 function PodiumCard({ entry }: { entry: PodiumEntry }) {
@@ -42,7 +31,7 @@ function PodiumCard({ entry }: { entry: PodiumEntry }) {
       )}
     >
       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {placeLabel(entry.rank)}
+        {formatPlace(entry.rank)}
       </p>
       <PlayerAvatar
         src={entry.avatarUrl}
@@ -99,7 +88,7 @@ export function TodayPodium({ players }: { players: LadderPlayer[] }) {
       displayName: player.displayName,
       avatarUrl: player.avatarUrl,
       points: player.todayPoints,
-      detail: `${countLabel(todayWinCount(player), "win", "wins")} · ${countLabel(player.todayPlayed, "game", "games")}`,
+      detail: `${countLabel(countTodayWins(player), "win", "wins")} · ${countLabel(player.todayPlayed, "game", "games")}`,
     }));
 
   return <RankingPodium entries={entries} label="Today ranking" />;

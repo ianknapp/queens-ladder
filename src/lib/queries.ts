@@ -1,6 +1,15 @@
 import { GAMES, GAME_SLUGS, type GameSlug } from "@/lib/games";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildDailyRows, buildSeason, type SeasonDay } from "@/lib/scoring";
+import {
+  buildDailyRows,
+  buildSeason,
+  compareSeasonPlayers,
+  compareTodayPlayers,
+  ensureTrackedPlaceScores,
+  hasVisibleScore,
+  type SeasonDay,
+  type TrackedPlayerRef,
+} from "@/lib/scoring";
 import type {
   DailyRow,
   GameCell,
@@ -42,6 +51,7 @@ type SnapshotRow = {
   id: string;
   puzzle_id: string;
   captured_at: string;
+  visible_count: number;
 };
 
 const SCORE_SELECT =
@@ -91,28 +101,52 @@ function unwrapPlayer(player: PlayerJoin | PlayerJoin[] | null): PlayerJoin | nu
   return Array.isArray(player) ? (player[0] ?? null) : player;
 }
 
-function toDailyRows(scores: ScoreJoin[]): DailyRow[] {
-  return buildDailyRows(
-    scores.flatMap((row) => {
-      const player = unwrapPlayer(row.player);
-      if (!player) return [];
-      return [
-        {
-          playerId: player.id,
-          displayName: player.display_name,
-          profileUrl: player.profile_url,
-          profileId: player.profile_id,
-          linkedinUrn: null,
-          avatarUrl: player.avatar_url,
-          isTracked: player.is_tracked,
-          rank: row.linkedin_rank,
-          timeMs: row.time_ms,
-          visibility: row.visibility,
-          noHints: row.no_hints,
-          noMistakes: row.no_mistakes,
-        },
-      ];
-    }),
+function toTrackedRefs(
+  players: Array<{
+    id: string;
+    display_name: string;
+    profile_url: string | null;
+    avatar_url: string | null;
+  }>,
+): TrackedPlayerRef[] {
+  return players.map((player) => ({
+    playerId: player.id,
+    displayName: player.display_name,
+    profileUrl: player.profile_url,
+    avatarUrl: player.avatar_url,
+  }));
+}
+
+function toDailyRows(
+  scores: ScoreJoin[],
+  tracked: TrackedPlayerRef[],
+  captured: boolean,
+): DailyRow[] {
+  return ensureTrackedPlaceScores(
+    buildDailyRows(
+      scores.flatMap((row) => {
+        const player = unwrapPlayer(row.player);
+        if (!player) return [];
+        return [
+          {
+            playerId: player.id,
+            displayName: player.display_name,
+            profileUrl: player.profile_url,
+            profileId: player.profile_id,
+            linkedinUrn: null,
+            avatarUrl: player.avatar_url,
+            isTracked: player.is_tracked,
+            rank: row.linkedin_rank,
+            timeMs: row.time_ms,
+            visibility: row.visibility,
+            noHints: row.no_hints,
+            noMistakes: row.no_mistakes,
+          },
+        ];
+      }),
+    ),
+    tracked,
+    captured,
   );
 }
 
@@ -225,10 +259,22 @@ export async function getLadder(): Promise<LadderPayload> {
     async (chunk) => {
       const { data, error } = await supabase
         .from("snapshots")
-        .select("id, puzzle_id, captured_at")
+        .select("id, puzzle_id, captured_at, visible_count")
         .in("puzzle_id", chunk)
         .order("captured_at", { ascending: false })
         .limit(4000);
+      if (error && /visible_count/i.test(error.message)) {
+        const fallback = await supabase
+          .from("snapshots")
+          .select("id, puzzle_id, captured_at")
+          .in("puzzle_id", chunk)
+          .order("captured_at", { ascending: false })
+          .limit(4000);
+        if (fallback.error) throw new Error(fallback.error.message);
+        return ((fallback.data ?? []) as Array<Omit<SnapshotRow, "visible_count">>).map(
+          (snapshot) => ({ ...snapshot, visible_count: 0 }),
+        );
+      }
       if (error) throw new Error(error.message);
       return (data ?? []) as SnapshotRow[];
     },
@@ -267,6 +313,7 @@ export async function getLadder(): Promise<LadderPayload> {
     scoresBySnapshot.set(score.snapshot_id, list);
   }
 
+  const trackedRefs = toTrackedRefs(trackedPlayers);
   const daysPlayed = new Map<string, Set<string>>();
   const latestPuzzleByGame = new Map<GameSlug, PuzzleRow>();
 
@@ -295,16 +342,16 @@ export async function getLadder(): Promise<LadderPayload> {
     if (!isTrackedGame(puzzle.game)) continue;
     const snapshot = latestByPuzzle.get(puzzle.id);
     if (!snapshot) continue;
-    const daily = toDailyRows(scoresBySnapshot.get(snapshot.id) ?? []).filter(
-      (row) => row.isTracked,
-    );
+    const snapshotScores = scoresBySnapshot.get(snapshot.id) ?? [];
+    const captured = snapshot.visible_count > 0 || snapshotScores.length > 0;
+    const daily = toDailyRows(snapshotScores, trackedRefs, captured);
     history[puzzle.game].push({
       rows: daily,
       globalAverageMs: puzzle.global_average_ms,
     });
 
     for (const row of daily) {
-      if (row.visibility !== "score" || row.timeMs == null) continue;
+      if (!hasVisibleScore(row)) continue;
       const dates = daysPlayed.get(row.playerId) ?? new Set<string>();
       dates.add(puzzle.puzzle_date);
       daysPlayed.set(row.playerId, dates);
@@ -316,9 +363,10 @@ export async function getLadder(): Promise<LadderPayload> {
     if (latest) {
       const snapshot = latestByPuzzle.get(latest.id);
       if (snapshot) {
-        const daily = toDailyRows(scoresBySnapshot.get(snapshot.id) ?? []);
+        const snapshotScores = scoresBySnapshot.get(snapshot.id) ?? [];
+        const captured = snapshot.visible_count > 0 || snapshotScores.length > 0;
+        const daily = toDailyRows(snapshotScores, trackedRefs, captured);
         for (const row of daily) {
-          if (!row.isTracked) continue;
           const player = playersById.get(row.playerId);
           if (!player) continue;
           player.today[game.slug] = {
@@ -328,7 +376,7 @@ export async function getLadder(): Promise<LadderPayload> {
             visibility: row.visibility,
           };
           player.todayPoints += row.points ?? 0;
-          if (row.visibility === "score" && row.timeMs != null) player.todayPlayed += 1;
+          if (hasVisibleScore(row)) player.todayPlayed += 1;
         }
       }
     }
@@ -346,9 +394,9 @@ export async function getLadder(): Promise<LadderPayload> {
   }
 
   const players = [...playersById.values()].sort((a, b) => {
-    if (b.todayPoints !== a.todayPoints) return b.todayPoints - a.todayPoints;
-    if (b.seasonPoints !== a.seasonPoints) return b.seasonPoints - a.seasonPoints;
-    return a.displayName.localeCompare(b.displayName);
+    const todayDiff = compareTodayPlayers(a, b);
+    if (todayDiff !== 0) return todayDiff;
+    return compareSeasonPlayers(a, b);
   });
 
   return {
