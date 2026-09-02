@@ -1,11 +1,13 @@
 import { GameWinsTable } from "@/components/game-wins-table";
 import { SeasonPodium, TodayPodium } from "@/components/ranking-podium";
+import { SeasonPicker } from "@/components/season-picker";
 import { SeasonTable } from "@/components/season-table";
 import { SiteHeader } from "@/components/site-header";
 import { TodayGrid } from "@/components/today-grid";
 import { GAMES } from "@/lib/games";
 import { hasSupabaseConfig } from "@/lib/env";
 import { getLadder } from "@/lib/queries";
+import { formatSeasonRange } from "@/lib/seasons";
 import { requireSiteAccess } from "@/lib/session";
 import { formatMs } from "@/lib/time";
 import type { GameMeta } from "@/lib/types";
@@ -24,7 +26,16 @@ function gameStatus(meta: GameMeta) {
   return `${label} —`;
 }
 
-export default async function HomePage() {
+function seasonQueryValue(value: string | string[] | undefined) {
+  if (typeof value === "string") return value;
+  return undefined;
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ season?: string | string[] }>;
+}) {
   await requireSiteAccess();
 
   if (!hasSupabaseConfig()) {
@@ -41,7 +52,8 @@ export default async function HomePage() {
     );
   }
 
-  const ladder = await getLadder();
+  const params = await searchParams;
+  const ladder = await getLadder(seasonQueryValue(params.season));
   const date =
     ladder.games.find((game) => game.puzzleDate)?.puzzleDate ?? null;
 
@@ -65,11 +77,13 @@ export default async function HomePage() {
 
         <section className="flex flex-col gap-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-xl font-semibold tracking-tight">Season</h2>
+            <h2 className="text-xl font-semibold tracking-tight">{ladder.season.name}</h2>
             <p className="text-sm text-muted-foreground">
-              {ladder.trackedCount} tracked · lowest points, then wins
+              {ladder.trackedCount} tracked · {formatSeasonRange(ladder.season)} · lowest points,
+              then wins
             </p>
           </div>
+          <SeasonPicker seasons={ladder.seasons} selectedId={ladder.season.id} />
           <SeasonPodium players={ladder.players} />
           <SeasonTable players={ladder.players} />
         </section>

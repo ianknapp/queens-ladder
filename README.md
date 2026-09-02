@@ -9,7 +9,7 @@ You create the free Supabase and Vercel projects. This repo is the local app + M
 ## 1. Supabase
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. SQL Editor → paste and run `supabase/migrations/20260813120000_init.sql`, then `supabase/migrations/20260831160000_avatars_bucket.sql`.
+2. SQL Editor → paste and run `supabase/migrations/20260813120000_init.sql`, then `supabase/migrations/20260831160000_avatars_bucket.sql`, then `supabase/migrations/20260902120000_seasons.sql`.
 3. Project Settings → API: copy **Project URL**, **anon/publishable key**, and **service role** key.
 
 ## 2. Local env
@@ -102,6 +102,6 @@ To cancel later: `/remind list`, then delete that reminder.
 
 Among tracked friends with a visible time, **place is the score**: 1st = 1 point, 2nd = 2, …, 10th = 10. Worse than 10th still counts as 10. Totals are the sum across games; **lowest points win**.
 
-Ties share a place and consume the slots under them (standard competition ranking). Three people tied for first all get 1; the next person is 4th and gets 4. Hiding a time, missing a captured game, or not showing up on the board counts as 10 so sitting out cannot beat playing. Season ranking ties break on wins, then name.
+Ties share a place and consume the slots under them (standard competition ranking). Three people tied for first all get 1; the next person is 4th and gets 4. Hiding a time, missing a captured game, or not showing up on the board counts as 10 so sitting out cannot beat playing. Season total is the sum across games in the selected season. Seasons live in the `seasons` table: `name`, `start_date`, `end_date`, and `is_active` (only one can be active). The board uses the active season unless you pass `?season=slug`. If `end_date` is null, the season runs until the day before the next season starts. Season ranking ties break on wins, then name.
 
 LinkedIn has no public games API. The collector uses your own session to read a page you can already see. Automated access can still get the account challenged; the Friends page has a manual score form as a fallback.

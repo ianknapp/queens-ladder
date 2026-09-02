@@ -1,4 +1,5 @@
 import { GAMES, GAME_SLUGS, type GameSlug } from "@/lib/games";
+import { listResolvedSeasons, selectSeason, type SeasonRecord } from "@/lib/seasons";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildDailyRows,
@@ -162,6 +163,49 @@ async function fetchInChunks<T>(
   return rows;
 }
 
+async function fetchPuzzleRows(
+  supabase: ReturnType<typeof createAdminClient>,
+  options: { gte?: string; lte?: string; limit?: number } = {},
+): Promise<PuzzleRow[]> {
+  let query = supabase
+    .from("puzzles")
+    .select("id, game, puzzle_date, puzzle_number, global_average_ms")
+    .in("game", [...GAME_SLUGS])
+    .order("puzzle_date", { ascending: false });
+  if (options.gte) query = query.gte("puzzle_date", options.gte);
+  if (options.lte) query = query.lte("puzzle_date", options.lte);
+  if (options.limit) query = query.limit(options.limit);
+
+  const { data, error } = await query;
+  if (!error) return data ?? [];
+  if (!/global_average_ms/i.test(error.message)) throw new Error(error.message);
+
+  let fallback = supabase
+    .from("puzzles")
+    .select("id, game, puzzle_date, puzzle_number")
+    .in("game", [...GAME_SLUGS])
+    .order("puzzle_date", { ascending: false });
+  if (options.gte) fallback = fallback.gte("puzzle_date", options.gte);
+  if (options.lte) fallback = fallback.lte("puzzle_date", options.lte);
+  if (options.limit) fallback = fallback.limit(options.limit);
+
+  const result = await fallback;
+  if (result.error) throw new Error(result.error.message);
+  return (result.data ?? []).map((puzzle) => ({
+    ...puzzle,
+    global_average_ms: null,
+  }));
+}
+
+function latestPuzzleByGameFrom(rows: PuzzleRow[]) {
+  const latestByGame = new Map<GameSlug, PuzzleRow>();
+  for (const puzzle of rows) {
+    if (!isTrackedGame(puzzle.game)) continue;
+    if (!latestByGame.has(puzzle.game)) latestByGame.set(puzzle.game, puzzle);
+  }
+  return latestByGame;
+}
+
 function applySeasonRow(
   player: LadderPlayer,
   game: GameSlug,
@@ -178,44 +222,59 @@ function applySeasonRow(
   player.seasonWins += row.wins;
 }
 
-export async function getLadder(): Promise<LadderPayload> {
+async function fetchSeasonRecords(
+  supabase: ReturnType<typeof createAdminClient>,
+): Promise<SeasonRecord[]> {
+  const { data, error } = await supabase
+    .from("seasons")
+    .select("slug, name, start_date, end_date, is_active")
+    .order("start_date", { ascending: true });
+  if (error) {
+    if (/relation .*seasons/i.test(error.message) || /could not find the table/i.test(error.message)) {
+      throw new Error(
+        "Seasons table is missing. Run supabase/migrations/20260902120000_seasons.sql in the SQL editor.",
+      );
+    }
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((row) => ({
+    slug: row.slug,
+    name: row.name,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    isActive: row.is_active,
+  }));
+}
+
+export async function getLadder(seasonId?: string | null): Promise<LadderPayload> {
   const supabase = createAdminClient();
+  const seasonRecords = await fetchSeasonRecords(supabase);
+  const seasons = listResolvedSeasons(seasonRecords);
+  const season = selectSeason(seasonRecords, seasonId);
 
-  const [{ data: tracked, error: trackedError }, puzzleResult] = await Promise.all([
-      supabase
-        .from("players")
-        .select("id, display_name, profile_url, avatar_url, is_tracked")
-        .eq("is_tracked", true)
-        .order("display_name", { ascending: true }),
-      supabase
-        .from("puzzles")
-        .select("id, game, puzzle_date, puzzle_number, global_average_ms")
-        .in("game", [...GAME_SLUGS])
-        .order("puzzle_date", { ascending: false }),
-    ]);
+  const seasonFilter: { gte: string; lte?: string } = { gte: season.startDate };
+  if (season.endDate) seasonFilter.lte = season.endDate;
 
-  let { data: puzzles, error: puzzlesError } = puzzleResult;
-  if (puzzlesError && /global_average_ms/i.test(puzzlesError.message)) {
-    const fallback = await supabase
-      .from("puzzles")
-      .select("id, game, puzzle_date, puzzle_number")
-      .in("game", [...GAME_SLUGS])
-      .order("puzzle_date", { ascending: false });
-    puzzles = (fallback.data ?? []).map((puzzle) => ({
-      ...puzzle,
-      global_average_ms: null,
-    }));
-    puzzlesError = fallback.error;
+  const [trackedResult, seasonPuzzles, latestPuzzles] = await Promise.all([
+    supabase
+      .from("players")
+      .select("id, display_name, profile_url, avatar_url, is_tracked")
+      .eq("is_tracked", true)
+      .order("display_name", { ascending: true }),
+    fetchPuzzleRows(supabase, seasonFilter),
+    fetchPuzzleRows(supabase, { limit: 40 }),
+  ]);
+
+  if (trackedResult.error) throw new Error(trackedResult.error.message);
+
+  const trackedPlayers = trackedResult.data ?? [];
+  const latestPuzzleByGame = latestPuzzleByGameFrom(latestPuzzles);
+  for (const [game, puzzle] of latestPuzzleByGameFrom(seasonPuzzles)) {
+    if (!latestPuzzleByGame.has(game)) latestPuzzleByGame.set(game, puzzle);
   }
 
-  if (trackedError) throw new Error(trackedError.message);
-  if (puzzlesError) throw new Error(puzzlesError.message);
-
-  const trackedPlayers = tracked ?? [];
-  const puzzleRows = (puzzles ?? []) as PuzzleRow[];
-
   const games: GameMeta[] = GAMES.map((game) => {
-    const latest = puzzleRows.find((puzzle) => puzzle.game === game.slug);
+    const latest = latestPuzzleByGame.get(game.slug);
     return {
       slug: game.slug,
       puzzleDate: latest?.puzzle_date ?? null,
@@ -226,7 +285,7 @@ export async function getLadder(): Promise<LadderPayload> {
   });
 
   if (trackedPlayers.length === 0) {
-    return { players: [], games, trackedCount: 0 };
+    return { players: [], games, trackedCount: 0, season, seasons };
   }
 
   const playersById = new Map<string, LadderPlayer>();
@@ -245,11 +304,19 @@ export async function getLadder(): Promise<LadderPayload> {
     });
   }
 
+  const puzzlesById = new Map<string, PuzzleRow>();
+  for (const puzzle of [...seasonPuzzles, ...latestPuzzles]) {
+    puzzlesById.set(puzzle.id, puzzle);
+  }
+  const puzzleRows = [...puzzlesById.values()];
+
   if (puzzleRows.length === 0) {
     return {
       players: [...playersById.values()],
       games,
       trackedCount: trackedPlayers.length,
+      season,
+      seasons,
     };
   }
 
@@ -315,14 +382,6 @@ export async function getLadder(): Promise<LadderPayload> {
 
   const trackedRefs = toTrackedRefs(trackedPlayers);
   const daysPlayed = new Map<string, Set<string>>();
-  const latestPuzzleByGame = new Map<GameSlug, PuzzleRow>();
-
-  for (const puzzle of puzzleRows) {
-    if (!isTrackedGame(puzzle.game)) continue;
-    if (!latestPuzzleByGame.has(puzzle.game)) {
-      latestPuzzleByGame.set(puzzle.game, puzzle);
-    }
-  }
 
   for (const [gameSlug, puzzle] of latestPuzzleByGame) {
     const snapshot = latestByPuzzle.get(puzzle.id);
@@ -338,7 +397,7 @@ export async function getLadder(): Promise<LadderPayload> {
     zip: [],
   };
 
-  for (const puzzle of puzzleRows) {
+  for (const puzzle of seasonPuzzles) {
     if (!isTrackedGame(puzzle.game)) continue;
     const snapshot = latestByPuzzle.get(puzzle.id);
     if (!snapshot) continue;
@@ -403,6 +462,8 @@ export async function getLadder(): Promise<LadderPayload> {
     players,
     games,
     trackedCount: trackedPlayers.length,
+    season,
+    seasons,
   };
 }
 

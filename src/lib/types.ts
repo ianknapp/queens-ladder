@@ -1,4 +1,5 @@
 import type { GameSlug } from "@/lib/games";
+import type { ResolvedSeason } from "@/lib/seasons";
 
 export type { GameSlug };
 
@@ -96,4 +97,6 @@ export type LadderPayload = {
   players: LadderPlayer[];
   games: GameMeta[];
   trackedCount: number;
+  season: ResolvedSeason;
+  seasons: ResolvedSeason[];
 };
