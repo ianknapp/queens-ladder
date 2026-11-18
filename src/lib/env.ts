@@ -22,6 +22,10 @@ export function sitePassword() {
   return process.env.SITE_PASSWORD ?? "";
 }
 
+export function adminPassword() {
+  return process.env.ADMIN_PASSWORD ?? "";
+}
+
 export function hasSupabaseConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }

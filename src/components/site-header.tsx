@@ -1,6 +1,6 @@
 import { logoutAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { siteIsLocked } from "@/lib/auth";
+import { adminIsConfigured, siteIsLocked } from "@/lib/auth";
 import Link from "next/link";
 
 export function SiteHeader() {
@@ -17,6 +17,11 @@ export function SiteHeader() {
           <Button variant="ghost" size="sm" asChild>
             <Link href="/players">Friends</Link>
           </Button>
+          {adminIsConfigured() ? (
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/admin">Admin</Link>
+            </Button>
+          ) : null}
           {siteIsLocked() ? (
             <form action={logoutAction}>
               <Button variant="outline" size="sm" type="submit">

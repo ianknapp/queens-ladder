@@ -18,7 +18,7 @@ You create the free Supabase and Vercel projects. This repo is the local app + M
 cp .env.example .env.local
 ```
 
-Fill in the Supabase values, a long `CAPTURE_SECRET`, and an optional `SITE_PASSWORD`.
+Fill in the Supabase values, a long `CAPTURE_SECRET`, an optional `SITE_PASSWORD`, and an `ADMIN_PASSWORD` for the season editor.
 
 ```bash
 npm install
@@ -63,6 +63,8 @@ npm run capture -- --game=queens --login --dump
 That also saves a screenshot and HTML under `data/` so we can adjust selectors.
 
 Then open **Friends** and toggle the 5–10 people who should appear on the ladder.
+
+Open **Admin** (`/admin`) and enter `ADMIN_PASSWORD` to rename a season, change its dates, mark it active, or start a new one. Leave the end date empty to run until the day before the next season starts. Only one season can be active.
 
 ## 4. Vercel
 
